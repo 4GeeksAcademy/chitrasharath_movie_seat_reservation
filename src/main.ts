@@ -229,6 +229,9 @@ function renderSeatMap(matrix: SeatingMatrix): string {
     lines.push(`R${String(rowIndex + 1).padStart(2, "0")} ${rowText}`);
   }
 
+  lines.push("");
+  lines.push("Legend: L - available seats | X - occupied seats");
+
   return lines.join("\n");
 }
 
