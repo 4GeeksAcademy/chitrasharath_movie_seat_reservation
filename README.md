@@ -18,6 +18,42 @@ Install the packages by typing:
 npm install
 ```
 
+## Run the seat reservation system
+
+### Web interface (clickable seat map)
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Then open your local URL in the browser (usually `http://localhost:5173`).
+
+In web mode, you can:
+
+- Click seats to reserve them.
+- Use the legend (`L` available, `X` occupied).
+- Use the action buttons to find and reserve 2 adjacent seats, or clear all reservations.
+
+### Console interface (terminal mode)
+
+Run the CLI version:
+
+```bash
+npm run console
+```
+
+The console supports commands like `show`, `check`, `reserve`, `counts`, `test`, and `help`.
+
+### Run the required scenario tests
+
+You can run all built-in scenario tests directly from the terminal:
+
+```bash
+npm run console -- --test
+```
+
 ## How do I run my website to see live changes?
 
 Type on the command line:

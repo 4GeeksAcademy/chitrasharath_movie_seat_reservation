@@ -551,16 +551,169 @@ function assert(condition: boolean, message: string, failures: string[]): void {
   }
 }
 
+function getRequiredElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`Required element not found: ${selector}`);
+  }
+  return element;
+}
+
+function runWebApp(): void {
+  let matrix = initializeSeatingMatrix();
+  const app = document.querySelector<HTMLDivElement>("#app");
+
+  if (!app) {
+    throw new Error("App root element (#app) not found.");
+  }
+
+  app.innerHTML = `
+    <main class="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-8">
+      <header class="rounded-3xl border border-amber-100 bg-gradient-to-r from-amber-50 via-rose-50 to-orange-100 p-6 shadow-sm">
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-600">Independent Cinema</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Seat Reservation Manager</h1>
+        <p class="mt-2 max-w-3xl text-sm text-slate-700 sm:text-base">
+          Click any available seat to reserve it. Occupied seats are locked and shown with X.
+        </p>
+      </header>
+
+      <section class="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur sm:p-6">
+        <div class="flex flex-wrap items-center gap-5 text-sm text-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-sm font-bold text-white">L</span>
+            <span>L - available seats</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="grid h-8 w-8 place-items-center rounded-lg bg-slate-500 text-sm font-bold text-white">X</span>
+            <span>X - occupied seats</span>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700">
+          <span id="available-count" class="rounded-full bg-emerald-100 px-3 py-1 text-emerald-800"></span>
+          <span id="occupied-count" class="rounded-full bg-slate-200 px-3 py-1 text-slate-800"></span>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-3">
+          <button
+            id="reserve-adjacent"
+            type="button"
+            class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
+            Find + Reserve 2 Adjacent Seats
+          </button>
+          <button
+            id="clear-seats"
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            Clear All Reservations
+          </button>
+        </div>
+
+        <p id="status-message" class="mt-4 min-h-6 text-sm font-semibold text-slate-700">Choose a seat to start reservation.</p>
+
+        <div class="mt-5 overflow-x-auto">
+          <div id="seat-grid" class="grid min-w-[760px] grid-cols-10 gap-2 sm:gap-3"></div>
+        </div>
+      </section>
+    </main>
+  `;
+
+  const seatGrid = getRequiredElement<HTMLDivElement>("#seat-grid");
+  const availableCount = getRequiredElement<HTMLSpanElement>("#available-count");
+  const occupiedCount = getRequiredElement<HTMLSpanElement>("#occupied-count");
+  const reserveAdjacentButton = getRequiredElement<HTMLButtonElement>("#reserve-adjacent");
+  const clearSeatsButton = getRequiredElement<HTMLButtonElement>("#clear-seats");
+  const statusMessage = getRequiredElement<HTMLParagraphElement>("#status-message");
+
+  function renderCounts(): void {
+    const counts = getSeatCounts(matrix);
+    availableCount.textContent = `Available: ${counts.available}`;
+    occupiedCount.textContent = `Occupied: ${counts.occupied}`;
+  }
+
+  function createSeatButton(row: number, col: number, isOccupied: boolean): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = isOccupied
+      ? "group flex aspect-square flex-col items-center justify-center rounded-xl border border-slate-400 bg-slate-500 text-white"
+      : "group flex aspect-square flex-col items-center justify-center rounded-xl border border-emerald-300 bg-emerald-500 text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-md active:translate-y-0";
+
+    button.dataset.row = String(row);
+    button.dataset.col = String(col);
+    button.setAttribute("aria-label", `Seat row ${row}, column ${col}`);
+
+    if (isOccupied) {
+      button.disabled = true;
+      button.setAttribute("aria-disabled", "true");
+    }
+
+    const symbol = document.createElement("span");
+    symbol.className = "text-base font-bold leading-none";
+    symbol.textContent = isOccupied ? "X" : "L";
+
+    const label = document.createElement("span");
+    label.className = "mt-1 text-[11px] font-medium leading-none opacity-90";
+    label.textContent = `R${row}C${col}`;
+
+    button.append(symbol, label);
+    return button;
+  }
+
+  function renderSeatGrid(): void {
+    seatGrid.innerHTML = "";
+
+    for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
+      for (let colIndex = 0; colIndex < matrix[rowIndex].length; colIndex += 1) {
+        const row = rowIndex + 1;
+        const col = colIndex + 1;
+        const isOccupied = matrix[rowIndex][colIndex] === 1;
+
+        const button = createSeatButton(row, col, isOccupied);
+        if (!isOccupied) {
+          button.addEventListener("click", () => {
+            const result = validateAndReserveSeats(matrix, row, col, 1);
+            statusMessage.textContent = `${result.message}: R${row}C${col}`;
+            renderCounts();
+            renderSeatGrid();
+          });
+        }
+
+        seatGrid.appendChild(button);
+      }
+    }
+  }
+
+  reserveAdjacentButton.addEventListener("click", () => {
+    const availability = checkSeatAvailability(matrix, 2);
+
+    if (!availability.success || availability.positions.length !== 2) {
+      statusMessage.textContent = STAFF_MESSAGES.seatsNotAvailable;
+      return;
+    }
+
+    const start = availability.positions[0];
+    const reservation = validateAndReserveSeats(matrix, start.row, start.col, 2);
+    statusMessage.textContent = `${reservation.message}: ${formatSeatPositions(reservation.positions)}`;
+    renderCounts();
+    renderSeatGrid();
+  });
+
+  clearSeatsButton.addEventListener("click", () => {
+    matrix = initializeSeatingMatrix();
+    statusMessage.textContent = "All reservations cleared.";
+    renderCounts();
+    renderSeatGrid();
+  });
+
+  renderCounts();
+  renderSeatGrid();
+}
+
 if (typeof document !== "undefined") {
   import("./style.css").then(() => {
-    const app = document.querySelector<HTMLDivElement>("#app");
-    if (app) {
-      app.innerHTML = [
-        "<h1>Cinema Seat Reservation Prototype</h1>",
-        "<p>Run in terminal: npm run console</p>",
-        "<p>Run scenarios: npm run console -- --test</p>"
-      ].join("");
-    }
+    runWebApp();
   });
 } else {
   const cliArgs = (globalThis as { process?: { argv?: string[] } }).process?.argv ?? [];
